@@ -4,6 +4,7 @@
 #include <string>
 #include <filesystem>
 #include "huffman.hpp"
+#include "lz77.hpp"
 
 namespace fs = std::filesystem;
 
@@ -26,46 +27,96 @@ static std::string human_size(size_t sz) {
     return std::to_string(sz/(1024*1024)) + " МБ";
 }
 
-int main(int argc, char* argv[]) {
-    std::cout << "CZip v1.0 — Huffman compressor\n";
+// Первый байт архива — идентификатор метода
+static constexpr uint8_t METHOD_HUFFMAN = 0x01;
+static constexpr uint8_t METHOD_LZ77    = 0x02;
 
-    if (argc != 4) {
-        std::cerr << "Использование:\n"
-                  << "  " << argv[0] << " -c <исходник> <архив>    # сжать\n"
-                  << "  " << argv[0] << " -d <архив> <результат>   # распаковать\n";
-        return 1;
+static void print_usage(const char* prog) {
+    std::cerr
+        << "CZip v1.1 — File Compressor\n\n"
+        << "Использование:\n"
+        << "  " << prog << " -c [--lz77] <исходник> <архив>   # сжать\n"
+        << "  " << prog << " -d <архив> <результат>            # распаковать\n\n"
+        << "Методы:\n"
+        << "  (по умолчанию)  Huffman\n"
+        << "  --lz77          LZ77 + Huffman\n";
+}
+
+int main(int argc, char* argv[]) {
+    if (argc < 4) { print_usage(argv[0]); return 1; }
+
+    std::string mode  = argv[1];
+    bool use_lz77 = false;
+    int  file_arg = 2;
+
+    if (mode == "-c" && std::string(argv[2]) == "--lz77") {
+        use_lz77 = true;
+        file_arg = 3;
+        if (argc < 5) { print_usage(argv[0]); return 1; }
     }
 
-    std::string mode   = argv[1];
-    std::string input  = argv[2];
-    std::string output = argv[3];
+    std::string input  = argv[file_arg];
+    std::string output = argv[file_arg + 1];
 
     try {
-        HuffmanCoder hc;
-
         if (mode == "-c") {
-            std::cout << "Сжатие: " << input << " → " << output << "\n";
             auto data = read_file(input);
-            std::cout << "  Исходный размер: " << human_size(data.size()) << "\n";
+            std::cout << "Сжатие: " << input << "\n"
+                      << "  Исходный размер: " << human_size(data.size()) << "\n"
+                      << "  Метод: " << (use_lz77 ? "LZ77 + Huffman" : "Huffman") << "\n";
 
-            auto compressed = hc.encode(data);
+            std::vector<uint8_t> compressed;
+            uint8_t method_id;
+
+            if (use_lz77) {
+                LZ77Coder lz;
+                auto lz_out = lz.encode(data);
+                HuffmanCoder hc;
+                compressed = hc.encode(lz_out);
+                method_id  = METHOD_LZ77;
+            } else {
+                HuffmanCoder hc;
+                compressed = hc.encode(data);
+                method_id  = METHOD_HUFFMAN;
+            }
+
+            // Добавляем 1 байт метода в начало
+            compressed.insert(compressed.begin(), method_id);
             write_file(output, compressed);
 
             double ratio = 100.0 * compressed.size() / data.size();
             std::cout << "  Сжатый размер:   " << human_size(compressed.size())
-                      << " (" << static_cast<int>(ratio) << "%)\n";
-            std::cout << "Готово.\n";
+                      << " (" << static_cast<int>(ratio) << "%)\n"
+                      << "Готово.\n";
 
         } else if (mode == "-d") {
-            std::cout << "Распаковка: " << input << " → " << output << "\n";
             auto data = read_file(input);
-            auto result = hc.decode(data);
+            if (data.empty()) throw std::runtime_error("Пустой архив");
+
+            uint8_t method_id = data[0];
+            std::vector<uint8_t> payload(data.begin() + 1, data.end());
+
+            std::vector<uint8_t> result;
+            if (method_id == METHOD_LZ77) {
+                HuffmanCoder hc;
+                auto huff_out = hc.decode(payload);
+                LZ77Coder lz;
+                result = lz.decode(huff_out);
+            } else if (method_id == METHOD_HUFFMAN) {
+                HuffmanCoder hc;
+                result = hc.decode(payload);
+            } else {
+                throw std::runtime_error("Неизвестный метод: " +
+                                         std::to_string(method_id));
+            }
+
             write_file(output, result);
-            std::cout << "  Восстановлено: " << human_size(result.size()) << "\n";
-            std::cout << "Готово.\n";
+            std::cout << "Распаковка: " << input << "\n"
+                      << "  Восстановлено: " << human_size(result.size()) << "\n"
+                      << "Готово.\n";
 
         } else {
-            std::cerr << "Неизвестный режим: " << mode << "\n";
+            print_usage(argv[0]);
             return 1;
         }
 
