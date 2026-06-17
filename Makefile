@@ -6,7 +6,7 @@ TARGET   := filecompressor
 
 all: $(TARGET)
 
-$(TARGET): src/main.cpp src/huffman.hpp src/bit_io.hpp src/lz77.hpp
+$(TARGET): src/main.cpp src/huffman.hpp src/bit_io.hpp src/lz77.hpp src/lzss.hpp src/rnc.hpp
 	$(CXX) $(CXXFLAGS) -o $@ src/main.cpp
 	@echo "✓ Built: ./$(TARGET)"
 
