@@ -23,10 +23,12 @@ struct App {
     GtkWidget* radio_rnc    = nullptr;
     GtkWidget* entry_input  = nullptr;
     GtkWidget* entry_output = nullptr;
-    GtkWidget* spin_window  = nullptr;
+    GtkWidget* spin_window   = nullptr;
     GtkWidget* frame_lz77   = nullptr;
     GtkWidget* frame_method = nullptr;
     GtkWidget* frame_format = nullptr;
+    GtkWidget* frame_opts   = nullptr;   // секция «Опции»
+    GtkWidget* check_resume = nullptr;   // чекбокс «Продолжить»
     GtkWidget* progress_bar = nullptr;
     GtkWidget* label_status = nullptr;
     GtkWidget* btn_start    = nullptr;
@@ -128,6 +130,7 @@ static void update_ui_state(GtkToggleButton* = nullptr, gpointer = nullptr) {
     }
 
     gtk_widget_set_visible(app.frame_format, !decomp);
+    gtk_widget_set_visible(app.frame_opts,   !decomp);
     gtk_widget_set_visible(app.frame_method, !decomp && is_zip);
     gtk_widget_set_visible(app.frame_lz77,   !decomp && is_zip && is_lz77);
 }
@@ -167,6 +170,8 @@ static void on_btn_start(GtkButton*, gpointer) {
                     : CompressMethod::HUFFMAN;
     opts.win_size = static_cast<uint32_t>(
         gtk_spin_button_get_value(GTK_SPIN_BUTTON(app.spin_window))) * 1024;
+    opts.resume = gtk_toggle_button_get_active(
+        GTK_TOGGLE_BUTTON(app.check_resume));
 
     app.working   = true;
     app.had_error = false;
@@ -298,6 +303,17 @@ static void build_ui(GtkApplication* gapp) {
     gtk_box_pack_start(GTK_BOX(hmeth), app.radio_huff, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hmeth), app.radio_lz77, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hmeth), app.radio_rnc,  FALSE, FALSE, 0);
+
+    // ── Опции сжатия ─────────────────────────────────────────
+    app.frame_opts = gtk_frame_new(" Опции ");
+    gtk_box_pack_start(GTK_BOX(vbox), app.frame_opts, FALSE, FALSE, 0);
+    GtkWidget* hopts = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_set_margin_start(hopts, 8); gtk_widget_set_margin_end(hopts, 8);
+    gtk_widget_set_margin_top(hopts, 6);   gtk_widget_set_margin_bottom(hopts, 6);
+    gtk_container_add(GTK_CONTAINER(app.frame_opts), hopts);
+    app.check_resume = gtk_check_button_new_with_label(
+        "Продолжить прерванное сжатие");
+    gtk_box_pack_start(GTK_BOX(hopts), app.check_resume, FALSE, FALSE, 0);
 
     // ── Окно LZ77 ────────────────────────────────────────────
     app.frame_lz77 = gtk_frame_new(" Размер окна LZ77 ");
