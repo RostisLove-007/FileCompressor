@@ -1,7 +1,13 @@
-// ══════════════════════════════════════════════════════════════
-//  FileCompressor – графический интерфейс (GTK3)
-//  Автор: C++17 / GTK3
-// ══════════════════════════════════════════════════════════════
+/**
+ * @file main.cpp
+ * @brief Графический интерфейс приложения FileCompressor на GTK3.
+ *
+ * Реализует окно настройки и запуска сжатия/распаковки файлов с
+ * использованием класса Compressor: выбор исходного и результирующего
+ * файла, формата архива и метода сжатия, отображение прогресса и статуса
+ * операции, выполняемой в отдельном потоке, а также возможность отмены
+ * с сохранением контрольной точки.
+ */
 #include <gtk/gtk.h>
 #include <thread>
 #include <atomic>
@@ -13,51 +19,61 @@
 
 namespace fs = std::filesystem;
 
-// ─────────────────────────────────────────────────────────────
-//  Глобальное состояние приложения
-// ─────────────────────────────────────────────────────────────
+/**
+ * @brief Глобальное состояние приложения: виджеты GTK и данные рабочего потока.
+ *
+ * Хранит как ссылки на все используемые виджеты интерфейса, так и
+ * атомарные/потокобезопасные поля, через которые рабочий поток сжатия
+ * обменивается данными (прогресс, статус, признак завершения и ошибки)
+ * с основным потоком GTK, обновляющим интерфейс по таймеру.
+ */
 struct AppState {
-    // Виджеты
-    GtkWidget* window        = nullptr;
-    GtkWidget* entry_input   = nullptr;
-    GtkWidget* entry_output  = nullptr;
-    GtkWidget* radio_zip     = nullptr;
-    GtkWidget* radio_rar     = nullptr;
-    GtkWidget* radio_huff    = nullptr;
-    GtkWidget* radio_lz77    = nullptr;
-    GtkWidget* spin_window   = nullptr;
-    GtkWidget* check_resume  = nullptr;
-    GtkWidget* radio_compress= nullptr;
-    GtkWidget* radio_decomp  = nullptr;
-    GtkWidget* btn_start     = nullptr;
-    GtkWidget* btn_cancel    = nullptr;
-    GtkWidget* progress_bar  = nullptr;
-    GtkWidget* label_status  = nullptr;
-    GtkWidget* label_ftype   = nullptr;
-    GtkWidget* frame_lz77    = nullptr;
-    GtkWidget* frame_format  = nullptr;   // секция «Формат архива»
-    GtkWidget* frame_method  = nullptr;   // секция «Метод сжатия»
-    GtkWidget* frame_opts    = nullptr;   // секция «Опции» (resume)
+    GtkWidget* window        = nullptr;  ///< Главное окно приложения.
+    GtkWidget* entry_input   = nullptr;  ///< Поле ввода пути к исходному файлу.
+    GtkWidget* entry_output  = nullptr;  ///< Поле ввода пути к файлу-результату.
+    GtkWidget* radio_zip     = nullptr;  ///< Переключатель формата CZIP.
+    GtkWidget* radio_rar     = nullptr;  ///< Переключатель формата CRAR.
+    GtkWidget* radio_huff    = nullptr;  ///< Переключатель метода сжатия «Хаффман».
+    GtkWidget* radio_lz77    = nullptr;  ///< Переключатель метода сжатия «LZ77+Хаффман».
+    GtkWidget* spin_window   = nullptr;  ///< Числовой переключатель размера окна LZ77 (в КБ).
+    GtkWidget* check_resume  = nullptr;  ///< Флажок «продолжить прерванное сжатие».
+    GtkWidget* radio_compress= nullptr;  ///< Переключатель режима «Сжать».
+    GtkWidget* radio_decomp  = nullptr;  ///< Переключатель режима «Восстановить».
+    GtkWidget* btn_start     = nullptr;  ///< Кнопка запуска операции.
+    GtkWidget* btn_cancel    = nullptr;  ///< Кнопка отмены операции.
+    GtkWidget* progress_bar  = nullptr;  ///< Индикатор прогресса операции.
+    GtkWidget* label_status  = nullptr;  ///< Метка с текстовым статусом операции.
+    GtkWidget* label_ftype   = nullptr;  ///< Метка с определённым типом исходного файла.
+    GtkWidget* frame_lz77    = nullptr;  ///< Секция настройки размера окна LZ77.
+    GtkWidget* frame_format  = nullptr;  ///< Секция «Формат архива».
+    GtkWidget* frame_method  = nullptr;  ///< Секция «Метод сжатия».
+    GtkWidget* frame_opts    = nullptr;  ///< Секция «Опции» (возобновление сжатия).
 
-    // Рабочее состояние
-    std::unique_ptr<Compressor> compressor;
-    std::thread                 worker;
-    std::atomic<bool>           running{false};
+    std::unique_ptr<Compressor> compressor;  ///< Текущий экземпляр компрессора, выполняющий операцию.
+    std::thread                 worker;      ///< Рабочий поток, в котором выполняется сжатие/распаковка.
+    std::atomic<bool>           running{false}; ///< Признак того, что операция выполняется в данный момент.
 
-    // Данные для обновления UI из рабочего потока
-    std::atomic<double>         progress_val{0.0};
-    std::string                 status_text;
-    std::atomic<bool>           finished{false};
-    std::atomic<bool>           had_error{false};
-    std::string                 error_text;
-    guint                       timer_id = 0;
+    std::atomic<double>         progress_val{0.0}; ///< Текущая доля выполнения операции (0.0..1.0).
+    std::string                 status_text;        ///< Текущий текст статуса для отображения в интерфейсе.
+    std::atomic<bool>           finished{false};     ///< Признак завершения операции рабочим потоком.
+    std::atomic<bool>           had_error{false};    ///< Признак того, что операция завершилась с ошибкой.
+    std::string                 error_text;          ///< Техническое сообщение об ошибке (исключение).
+    guint                       timer_id = 0;        ///< Идентификатор таймера обновления интерфейса GTK.
 };
 
+/// Единственный экземпляр глобального состояния приложения.
 static AppState app;
 
-// ─────────────────────────────────────────────────────────────
-//  Вспомогательные функции GTK
-// ─────────────────────────────────────────────────────────────
+/**
+ * @brief Включает или отключает доступность элементов управления формы.
+ *
+ * Используется для блокировки интерфейса на время выполнения операции
+ * сжатия/распаковки и обратной разблокировки после её завершения.
+ * Кнопка отмены всегда находится в противофазе с остальными элементами.
+ *
+ * @param enabled @c true, чтобы сделать элементы управления доступными
+ *                (кроме кнопки отмены, которая в этом случае отключается).
+ */
 static void set_controls_sensitive(bool enabled) {
     gtk_widget_set_sensitive(app.entry_input,    enabled);
     gtk_widget_set_sensitive(app.entry_output,   enabled);
@@ -73,6 +89,10 @@ static void set_controls_sensitive(bool enabled) {
     gtk_widget_set_sensitive(app.btn_cancel,    !enabled);
 }
 
+/**
+ * @brief Показывает модальное диалоговое окно с сообщением об ошибке.
+ * @param msg Текст сообщения об ошибке.
+ */
 static void show_error(const std::string& msg) {
     GtkWidget* dlg = gtk_message_dialog_new(
         GTK_WINDOW(app.window),
@@ -84,6 +104,10 @@ static void show_error(const std::string& msg) {
     gtk_widget_destroy(dlg);
 }
 
+/**
+ * @brief Показывает модальное диалоговое окно с информационным сообщением.
+ * @param msg Текст информационного сообщения.
+ */
 static void show_info(const std::string& msg) {
     GtkWidget* dlg = gtk_message_dialog_new(
         GTK_WINDOW(app.window),
@@ -95,16 +119,24 @@ static void show_info(const std::string& msg) {
     gtk_widget_destroy(dlg);
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Таймер: обновляет UI из главного потока
-// ─────────────────────────────────────────────────────────────
-static gboolean update_ui(gpointer) {
+/**
+ * @brief Периодический обработчик таймера GTK, обновляющий виджеты интерфейса
+ *        данными, накопленными рабочим потоком сжатия/распаковки.
+ *
+ * Обновляет полосу прогресса и метку статуса значениями из AppState. При
+ * обнаружении признака завершения операции (app.finished) разблокирует
+ * элементы управления, останавливает таймер, показывает диалог с
+ * результатом (ошибка или успех) и присоединяет (join) рабочий поток.
+ *
+ * @param user_data Не используется (требуется сигнатурой GSourceFunc).
+ * @return @c G_SOURCE_CONTINUE, чтобы таймер продолжал срабатывать.
+ */
+static gboolean update_ui(gpointer user_data) {
+    (void)user_data;
     if (!app.running && !app.finished) return G_SOURCE_CONTINUE;
 
-    // Обновляем прогресс-бар и статус
     double frac = app.progress_val.load();
     gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(app.progress_bar), frac);
-    // Процент прямо на полоске
     char pct[16];
     if (frac <= 0.0)      pct[0] = '\0';
     else if (frac >= 1.0) snprintf(pct, sizeof(pct), "100%%");
@@ -120,8 +152,6 @@ static gboolean update_ui(gpointer) {
 
         if (app.had_error) {
             gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(app.progress_bar), 0.0);
-            // status_text уже содержит понятное сообщение об ошибке,
-            // установленное в рабочем потоке — показываем его, а не e.what()
             show_error(app.status_text);
         } else {
             show_info("Операция успешно завершена!");
@@ -132,9 +162,13 @@ static gboolean update_ui(gpointer) {
     return G_SOURCE_CONTINUE;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Диалог выбора файла
-// ─────────────────────────────────────────────────────────────
+/**
+ * @brief Открывает стандартный диалог выбора файла GTK для открытия или сохранения.
+ * @param save_mode @c true для диалога сохранения файла, @c false — для открытия.
+ * @param title     Заголовок диалогового окна.
+ * @return Выбранный пользователем путь к файлу, либо пустая строка, если
+ *         пользователь отменил выбор.
+ */
 static std::string browse_file(bool save_mode, const std::string& title) {
     GtkWidget* dlg = gtk_file_chooser_dialog_new(
         title.c_str(),
@@ -158,11 +192,21 @@ static std::string browse_file(bool save_mode, const std::string& title) {
     return result;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Единая функция обновления состояния виджетов.
-//  Вызывается при любом переключении действия / формата / метода.
-// ─────────────────────────────────────────────────────────────
-static void update_ui_state(GtkToggleButton* = nullptr, gpointer = nullptr) {
+/**
+ * @brief Обновляет видимость секций интерфейса в зависимости от выбранного
+ *        режима (сжатие/восстановление), формата архива и метода сжатия.
+ *
+ * Вызывается при переключении любого из связанных радио-переключателей.
+ * При смене режима «сжатие ↔ восстановление» очищает поля путей к файлам,
+ * так как они теряют смысл. Секция формата и опций показывается только
+ * при сжатии; секция метода — только при сжатии в формат CZIP; секция
+ * размера окна LZ77 — только при сжатии в CZIP методом LZ77.
+ *
+ * @param toggle    Не используется явно (сигнатура GTK callback'а "toggled").
+ * @param user_data Не используется.
+ */
+static void update_ui_state(GtkToggleButton* toggle = nullptr, gpointer user_data = nullptr) {
+    (void)toggle; (void)user_data;
     bool decompress = gtk_toggle_button_get_active(
                           GTK_TOGGLE_BUTTON(app.radio_decomp));
     bool is_zip     = gtk_toggle_button_get_active(
@@ -170,7 +214,6 @@ static void update_ui_state(GtkToggleButton* = nullptr, gpointer = nullptr) {
     bool is_lz77    = gtk_toggle_button_get_active(
                           GTK_TOGGLE_BUTTON(app.radio_lz77));
 
-    // При переключении режима очищаем пути — они теряют смысл
     static bool last_decompress = false;
     if (decompress != last_decompress) {
         last_decompress = decompress;
@@ -178,22 +221,29 @@ static void update_ui_state(GtkToggleButton* = nullptr, gpointer = nullptr) {
         gtk_entry_set_text(GTK_ENTRY(app.entry_output), "");
     }
 
-    // При восстановлении — скрываем формат, метод и опции сжатия
     gtk_widget_set_visible(app.frame_format, !decompress);
     gtk_widget_set_visible(app.frame_opts,   !decompress);
 
-    // Метод скрываем если: восстановление ИЛИ выбран CRAR (метод фиксирован)
     gtk_widget_set_visible(app.frame_method, !decompress && is_zip);
 
-    // Окно LZ77 только для: сжатие + CZIP + LZ77
     gtk_widget_set_visible(app.frame_lz77, !decompress && is_zip && is_lz77);
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Автозаполнение выходного файла
-// ─────────────────────────────────────────────────────────────
-static void on_input_changed(GtkEditable* ed, gpointer) {
-    const gchar* inp = gtk_entry_get_text(GTK_ENTRY(app.entry_input));
+/**
+ * @brief Обработчик изменения поля исходного файла: автозаполняет путь
+ *        к файлу-результату и определяет тип исходного файла.
+ *
+ * Для режима восстановления убирает расширение ".czip"/".crar" из имени
+ * (или добавляет суффикс "_restored", если расширения нет); для режима
+ * сжатия добавляет расширение ".czip" или ".crar" в зависимости от
+ * выбранного формата. Также обновляет метку с определённым типом файла.
+ *
+ * @param ed        Виджет редактируемого поля (поле ввода исходного файла).
+ * @param user_data Не используется.
+ */
+static void on_input_changed(GtkEditable* ed, gpointer user_data) {
+    (void)user_data;
+    const gchar* inp = gtk_entry_get_text(GTK_ENTRY(ed));
     if (!inp || inp[0] == '\0') return;
 
     std::string out_path = inp;
@@ -201,7 +251,6 @@ static void on_input_changed(GtkEditable* ed, gpointer) {
         gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(app.radio_decomp));
 
     if (is_decompress) {
-        // Убираем расширение .czip/.crar
         if (out_path.size() > 5 &&
             (out_path.substr(out_path.size()-5) == ".czip" ||
              out_path.substr(out_path.size()-5) == ".crar"))
@@ -213,7 +262,6 @@ static void on_input_changed(GtkEditable* ed, gpointer) {
         out_path += is_zip ? ".czip" : ".crar";
     }
 
-    // Автоопределение типа файла
     auto ftype = FileDetector::detect_file(inp);
     gtk_label_set_text(GTK_LABEL(app.label_ftype),
                        ("Тип: " + ftype.description).c_str());
@@ -221,10 +269,22 @@ static void on_input_changed(GtkEditable* ed, gpointer) {
     gtk_entry_set_text(GTK_ENTRY(app.entry_output), out_path.c_str());
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Кнопка «Старт»
-// ─────────────────────────────────────────────────────────────
-static void on_btn_start(GtkButton*, gpointer) {
+/**
+ * @brief Обработчик нажатия кнопки «Старт»: валидирует ввод и запускает
+ *        операцию сжатия/распаковки в отдельном потоке.
+ *
+ * Проверяет, что указаны оба пути и исходный файл существует, считывает
+ * выбранные пользователем параметры (формат, метод, размер окна, флаг
+ * возобновления), блокирует элементы управления, запускает таймер
+ * обновления интерфейса и создаёт рабочий поток, который вызывает
+ * Compressor::compress() или Compressor::decompress() и перехватывает
+ * исключения, сохраняя понятное пользователю сообщение об ошибке.
+ *
+ * @param button    Не используется (нажатая кнопка).
+ * @param user_data Не используется.
+ */
+static void on_btn_start(GtkButton* button, gpointer user_data) {
+    (void)button; (void)user_data;
     std::string input  = gtk_entry_get_text(GTK_ENTRY(app.entry_input));
     std::string output = gtk_entry_get_text(GTK_ENTRY(app.entry_output));
 
@@ -258,16 +318,13 @@ static void on_btn_start(GtkButton*, gpointer) {
     gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(app.progress_bar), 0.0);
     set_controls_sensitive(false);
 
-    // Запускаем таймер обновления UI
-    app.timer_id = g_timeout_add(50, update_ui, nullptr);  // ~20 FPS
+    app.timer_id = g_timeout_add(50, update_ui, nullptr);
 
-    // Создаём компрессор с callbacks
     app.compressor = std::make_unique<Compressor>(
         [](double p) { app.progress_val = p; },
         [](const std::string& s) { app.status_text = s; }
     );
 
-    // Запускаем рабочий поток
     if (app.worker.joinable()) app.worker.join();
     app.worker = std::thread([compress, input, output, opts]() {
         try {
@@ -279,7 +336,6 @@ static void on_btn_start(GtkButton*, gpointer) {
         } catch (const std::exception& e) {
             app.had_error  = true;
             app.error_text = e.what();
-            // Техническое сообщение скрываем — показываем понятный текст
             if (!compress)
                 app.status_text = "⚠ Файл повреждён — восстановление прервано";
             else
@@ -290,27 +346,41 @@ static void on_btn_start(GtkButton*, gpointer) {
     });
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Кнопка «Отмена»
-// ─────────────────────────────────────────────────────────────
-static void on_btn_cancel(GtkButton*, gpointer) {
+/**
+ * @brief Обработчик нажатия кнопки «Отмена»: запрашивает остановку
+ *        выполняющейся операции сжатия/распаковки.
+ * @param button    Не используется (нажатая кнопка).
+ * @param user_data Не используется.
+ */
+static void on_btn_cancel(GtkButton* button, gpointer user_data) {
+    (void)button; (void)user_data;
     if (app.compressor) {
         app.compressor->cancel();
         app.status_text = "Отмена... (будет сохранена контрольная точка)";
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Построение интерфейса
-// ─────────────────────────────────────────────────────────────
-static void build_ui(GtkApplication* gapp, gpointer) {
-    // ── Главное окно ─────────────────────────────────────────
+/**
+ * @brief Строит главное окно приложения и все его виджеты, подключает
+ *        обработчики сигналов и устанавливает начальное состояние интерфейса.
+ *
+ * Вызывается по сигналу "activate" GtkApplication. Создаёт окно, применяет
+ * CSS-стили оформления, собирает секции «Файлы», «Действие», «Формат
+ * архива», «Метод сжатия», «Размер окна LZ77», «Опции» и «Прогресс»,
+ * а также кнопки запуска и отмены операции, после чего подключает все
+ * обработчики событий и показывает окно.
+ *
+ * @param gapp      Экземпляр приложения GTK, на сигнал "activate" которого
+ *                  была вызвана данная функция.
+ * @param user_data Не используется.
+ */
+static void build_ui(GtkApplication* gapp, gpointer user_data) {
+    (void)user_data;
     app.window = gtk_application_window_new(gapp);
     gtk_window_set_title(GTK_WINDOW(app.window), "FileCompressor – Архиватор");
     gtk_window_set_default_size(GTK_WINDOW(app.window), 620, 520);
     gtk_window_set_resizable(GTK_WINDOW(app.window), FALSE);
 
-    // CSS стили
     GtkCssProvider* css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(css, R"(
         window { background-color: #1e1e2e; }
@@ -338,18 +408,15 @@ static void build_ui(GtkApplication* gapp, gpointer) {
         GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(css);
 
-    // ── Основной контейнер ───────────────────────────────────
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_container_set_border_width(GTK_CONTAINER(vbox), 14);
     gtk_container_add(GTK_CONTAINER(app.window), vbox);
 
-    // ── Заголовок ────────────────────────────────────────────
     GtkWidget* title = gtk_label_new(nullptr);
     gtk_label_set_markup(GTK_LABEL(title),
         "<span font='16' weight='bold' color='#cba6f7'>🗜 FileCompressor</span>");
     gtk_box_pack_start(GTK_BOX(vbox), title, FALSE, FALSE, 0);
 
-    // ── Секция: файлы ─────────────────────────────────────────
     GtkWidget* ffile = gtk_frame_new(" Файлы ");
     gtk_box_pack_start(GTK_BOX(vbox), ffile, FALSE, FALSE, 0);
     GtkWidget* grid_files = gtk_grid_new();
@@ -358,7 +425,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     gtk_container_set_border_width(GTK_CONTAINER(grid_files), 8);
     gtk_container_add(GTK_CONTAINER(ffile), grid_files);
 
-    // Исходный файл
     gtk_grid_attach(GTK_GRID(grid_files),
                     gtk_label_new("Исходный файл:"), 0, 0, 1, 1);
     app.entry_input = gtk_entry_new();
@@ -367,7 +433,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     GtkWidget* btn_in = gtk_button_new_with_label("📁 Обзор");
     gtk_grid_attach(GTK_GRID(grid_files), btn_in, 2, 0, 1, 1);
 
-    // Результат
     gtk_grid_attach(GTK_GRID(grid_files),
                     gtk_label_new("Файл-результат:"), 0, 1, 1, 1);
     app.entry_output = gtk_entry_new();
@@ -376,14 +441,12 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     GtkWidget* btn_out = gtk_button_new_with_label("📁 Обзор");
     gtk_grid_attach(GTK_GRID(grid_files), btn_out, 2, 1, 1, 1);
 
-    // Тип файла
     app.label_ftype = gtk_label_new("Тип: не определён");
     gtk_widget_set_halign(app.label_ftype, GTK_ALIGN_START);
     GtkStyleContext* sc = gtk_widget_get_style_context(app.label_ftype);
     gtk_style_context_add_class(sc, "dim-label");
     gtk_grid_attach(GTK_GRID(grid_files), app.label_ftype, 1, 2, 2, 1);
 
-    // ── Секция: действие ─────────────────────────────────────
     GtkWidget* faction = gtk_frame_new(" Действие ");
     gtk_box_pack_start(GTK_BOX(vbox), faction, FALSE, FALSE, 0);
     GtkWidget* hact = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
@@ -396,7 +459,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     gtk_box_pack_start(GTK_BOX(hact), app.radio_compress, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hact), app.radio_decomp,   FALSE, FALSE, 0);
 
-    // ── Секция: формат ───────────────────────────────────────
     app.frame_format = gtk_frame_new(" Формат архива ");
     GtkWidget* fformat = app.frame_format;
     gtk_box_pack_start(GTK_BOX(vbox), fformat, FALSE, FALSE, 0);
@@ -411,7 +473,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     gtk_box_pack_start(GTK_BOX(hfmt), app.radio_zip, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hfmt), app.radio_rar, FALSE, FALSE, 0);
 
-    // ── Секция: метод (ZIP) ───────────────────────────────────
     app.frame_method = gtk_frame_new(" Метод сжатия (CZIP) ");
     GtkWidget* fmethod = app.frame_method;
     gtk_box_pack_start(GTK_BOX(vbox), fmethod, FALSE, FALSE, 0);
@@ -431,7 +492,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     gtk_widget_set_halign(hint_rar, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(hmeth), hint_rar, FALSE, FALSE, 0);
 
-    // ── Секция: размер окна LZ77 ──────────────────────────────
     app.frame_lz77 = gtk_frame_new(" Размер окна LZ77 ");
     gtk_box_pack_start(GTK_BOX(vbox), app.frame_lz77, FALSE, FALSE, 0);
     GtkWidget* hlz = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
@@ -443,15 +503,12 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(app.spin_window), 32);
     GtkWidget* lbl_kb = gtk_label_new("КБ");
 
-    // Шкала (слайдер)
     GtkWidget* scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,
                                                  1, 64, 1);
     gtk_range_set_value(GTK_RANGE(scale), 32);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
 
-    // Явная двусторонняя синхронизация через value-changed.
-    // Флаг updating предотвращает бесконечный цикл: spin→scale→spin→...
     static bool updating = false;
 
     g_signal_connect(app.spin_window, "value-changed",
@@ -477,7 +534,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     gtk_box_pack_start(GTK_BOX(hlz), lbl_kb,          FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hlz), scale,            TRUE, TRUE, 8);
 
-    // ── Опции ────────────────────────────────────────────────
     app.frame_opts = gtk_frame_new(" Опции ");
     GtkWidget* fopts = app.frame_opts;
     gtk_box_pack_start(GTK_BOX(vbox), fopts, FALSE, FALSE, 0);
@@ -489,7 +545,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
         "🔁 Продолжить прерванное сжатие (если есть контрольная точка)");
     gtk_box_pack_start(GTK_BOX(hopts), app.check_resume, FALSE, FALSE, 0);
 
-    // ── Прогресс ─────────────────────────────────────────────
     GtkWidget* fpr = gtk_frame_new(" Прогресс ");
     gtk_box_pack_start(GTK_BOX(vbox), fpr, FALSE, FALSE, 0);
     GtkWidget* vpr = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
@@ -505,7 +560,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     gtk_label_set_ellipsize(GTK_LABEL(app.label_status), PANGO_ELLIPSIZE_END);
     gtk_box_pack_start(GTK_BOX(vpr), app.label_status, FALSE, FALSE, 0);
 
-    // ── Кнопки действий ──────────────────────────────────────
     GtkWidget* hbtn = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_set_halign(hbtn, GTK_ALIGN_END);
     gtk_box_pack_start(GTK_BOX(vbox), hbtn, FALSE, FALSE, 0);
@@ -519,7 +573,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     gtk_box_pack_start(GTK_BOX(hbtn), app.btn_start,  FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hbtn), app.btn_cancel, FALSE, FALSE, 0);
 
-    // ── Подключение сигналов ──────────────────────────────────
     g_signal_connect(btn_in, "clicked", G_CALLBACK(+[](GtkButton*, gpointer) {
         auto p = browse_file(false, "Выберите исходный файл");
         if (!p.empty()) gtk_entry_set_text(GTK_ENTRY(app.entry_input), p.c_str());
@@ -532,7 +585,6 @@ static void build_ui(GtkApplication* gapp, gpointer) {
 
     g_signal_connect(app.entry_input,    "changed", G_CALLBACK(on_input_changed), nullptr);
 
-    // Все переключатели ведут к одной функции обновления состояния UI
     g_signal_connect(app.radio_compress, "toggled", G_CALLBACK(update_ui_state), nullptr);
     g_signal_connect(app.radio_decomp,   "toggled", G_CALLBACK(update_ui_state), nullptr);
     g_signal_connect(app.radio_zip,      "toggled", G_CALLBACK(update_ui_state), nullptr);
@@ -543,15 +595,12 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     g_signal_connect(app.btn_start,  "clicked", G_CALLBACK(on_btn_start),  nullptr);
     g_signal_connect(app.btn_cancel, "clicked", G_CALLBACK(on_btn_cancel), nullptr);
 
-    // Начальное состояние
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app.radio_compress), TRUE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app.radio_zip),      TRUE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app.radio_huff),     TRUE);
 
-    // hint_rar больше не нужен — метод секция целиком блокируется при CRAR
     gtk_widget_set_visible(hint_rar, FALSE);
 
-    // Применяем начальное состояние (вызовет update_ui_state через signals выше)
     update_ui_state();
 
     gtk_widget_show_all(app.window);
@@ -559,9 +608,17 @@ static void build_ui(GtkApplication* gapp, gpointer) {
     gtk_widget_set_visible(hint_rar, FALSE);
 }
 
-// ─────────────────────────────────────────────────────────────
-//  main
-// ─────────────────────────────────────────────────────────────
+/**
+ * @brief Точка входа приложения.
+ *
+ * Создаёт объект GtkApplication, подключает построение интерфейса к
+ * сигналу "activate" и передаёт управление основному циклу обработки
+ * событий GTK.
+ *
+ * @param argc Количество аргументов командной строки.
+ * @param argv Массив аргументов командной строки.
+ * @return Код завершения приложения, возвращённый g_application_run().
+ */
 int main(int argc, char* argv[]) {
     GtkApplication* gapp = gtk_application_new(
         "ru.compressor.file", G_APPLICATION_DEFAULT_FLAGS);

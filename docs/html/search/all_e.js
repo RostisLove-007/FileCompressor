@@ -1,0 +1,28 @@
+var searchData=
+[
+  ['radio_5fcompress_0',['radio_compress',['../struct_app_state.html#acc25f296ddd08d3a8d268c33404d88d5',1,'AppState']]],
+  ['radio_5fdecomp_1',['radio_decomp',['../struct_app_state.html#a8e38a48848c0d756424ad4e6d4ee0767',1,'AppState']]],
+  ['radio_5fhuff_2',['radio_huff',['../struct_app_state.html#a0814f13b7e3a1eb75a2b666542032e38',1,'AppState']]],
+  ['radio_5flz77_3',['radio_lz77',['../struct_app_state.html#afcdc7102190fa7399abacedff3e721f0',1,'AppState']]],
+  ['radio_5frar_4',['radio_rar',['../struct_app_state.html#a8514fcba4d3a598e36dd19434764084e',1,'AppState']]],
+  ['radio_5fzip_5',['radio_zip',['../struct_app_state.html#a8eb7f8fceee583b12692fd5260d29421',1,'AppState']]],
+  ['ratio_5fstr_6',['ratio_str',['../class_compressor.html#ae4d9bcb90af058b657e5a6f3dbc92aa1',1,'Compressor']]],
+  ['read_5farchive_7',['read_archive',['../archive_8hpp.html#aaa14b6b50b0cb6b91da05c58e044d068',1,'archive.hpp']]],
+  ['read_5fbit_8',['read_bit',['../class_bit_reader.html#a697a7f855e17dedd7dc7c811c7671214',1,'BitReader::read_bit()'],['../class_arith_decoder.html#adf6b83ed48f0d02c126a7d1ad4efa8ca',1,'ArithDecoder::read_bit()']]],
+  ['read_5fbits_9',['read_bits',['../class_bit_reader.html#a7fe5510d3b3893fa88e022b36ebbe060',1,'BitReader']]],
+  ['read_5fu16_10',['read_u16',['../archive_8hpp.html#a62ca9b79bc1621fbe7a4a565611af03f',1,'archive.hpp']]],
+  ['read_5fu32_11',['read_u32',['../archive_8hpp.html#a7b2bc8e66cd320a49ef8b8ec9eb4a7e3',1,'archive.hpp']]],
+  ['read_5fu64_12',['read_u64',['../archive_8hpp.html#ac9210dd5603eaf220f24143e92df2962',1,'archive.hpp']]],
+  ['read_5fu8_13',['read_u8',['../archive_8hpp.html#aea18f8a037be1db42d0610f51facaf2e',1,'archive.hpp']]],
+  ['rebuild_5ffrom_5flengths_14',['rebuild_from_lengths',['../class_huffman_coder.html#a832b5795ec503683be8e8743768b9cd7',1,'HuffmanCoder']]],
+  ['rebuild_5ftree_5ffrom_5fcodes_15',['rebuild_tree_from_codes',['../class_huffman_coder.html#a466eafdf034b390db3cb6ebab6d903c7',1,'HuffmanCoder']]],
+  ['remove_5fcheckpoint_16',['remove_checkpoint',['../archive_8hpp.html#ae0eed26088299df0fa602e19852f3499',1,'archive.hpp']]],
+  ['reset_17',['reset',['../class_c_r_c32.html#a185fb2cc5c4f20b6bf75ebcdbaf69748',1,'CRC32']]],
+  ['result_18',['Result',['../struct_file_detector_1_1_result.html',1,'FileDetector']]],
+  ['resume_19',['resume',['../struct_compress_options.html#a1d80206e93dacffc808fda4a5360662a',1,'CompressOptions']]],
+  ['right_20',['right',['../struct_huffman_coder_1_1_node.html#a30882b525af91add3e4d85abe3acf07e',1,'HuffmanCoder::Node']]],
+  ['rnc_2ehpp_21',['rnc.hpp',['../rnc_8hpp.html',1,'']]],
+  ['rnccoder_22',['RNCCoder',['../class_r_n_c_coder.html',1,'']]],
+  ['root_5f_23',['root_',['../class_huffman_coder.html#a90dee70a58756c668741900ca181ad1b',1,'HuffmanCoder']]],
+  ['running_24',['running',['../struct_app_state.html#a032195ba4cd172770fd7015511c08f35',1,'AppState']]]
+];
