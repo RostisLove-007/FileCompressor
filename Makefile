@@ -15,9 +15,9 @@ GTK_LIBS := $(shell pkg-config --libs gtk+-3.0 2>/dev/null || \
         -latk-1.0 -lcairo-gobject -lcairo -lgdk_pixbuf-2.0 \
         -lgio-2.0 -lgobject-2.0 -lglib-2.0") -lpthread
 
-CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Isrc $(GTK_CFLAGS)
+CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Isrc -Iinclude $(GTK_CFLAGS)
 TARGET   := filecompressor
-HEADERS  := $(wildcard src/*.hpp)
+HEADERS  := $(wildcard include/*.hpp src/*.hpp)
 
 .PHONY: all clean
 
